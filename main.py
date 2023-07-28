@@ -11,6 +11,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 client = discord.Client(intents=discord.Intents.all())
 os.makedirs('./output', exist_ok=True)
 model=input("Use GPT-4 instead of GPT-3.5 (y/N): ")
+system_prompt=""
 
 forbidden_channels = []
 async def fetch_messages(channel, after):
@@ -30,7 +31,6 @@ async def fetch_messages(channel, after):
                     f.write(msg)
     except discord.Forbidden:
         forbidden_channels.append(f"{channel.name}")
-        # print(f"Bot doesn't have the required permissions to fetch messages from {channel.guild.name} / {channel.name}")
 
 def user_input_guild(guilds):
     print("\nWhich guild would you like to search?")
@@ -47,6 +47,9 @@ async def on_ready():
     after = datetime.datetime.now() - datetime.timedelta(days=days)
     print("")
 
+    global system_prompt
+    system_prompt = f"You are a Discord message summarizer, providing clear and concise markdown summaries of the past {days} days of messages in the {guild.name} Discord server. {('The server description: ' + guild.description) if guild.description else ''} Today's date is {datetime.date.today().strftime('%B %d, %Y')}. Please start with a summary that briefly outlines the most important topics discussed. Following this, write markdown sections with summaries for each significant topic. Within these sections, I would like bullet points summarizing the most important points raised, and inline or block quotes from any particularly important messages. Omit spam and discussions pertaining to blatant promotion."
+
     for channel in guild.channels:
         if isinstance(channel, discord.TextChannel):
             await fetch_messages(channel, after)
@@ -60,10 +63,10 @@ async def on_ready():
     await client.close()
 
 def summarize(model="gpt-4", max_tokens=8192):
+    print(system_prompt)
     tokenizer = tiktoken.get_encoding("cl100k_base")
     token_count = 0
 
-    system_prompt = f"You are a Discord message summarizer, providing clear and concise markdown summaries of today's messages in the JuiceboxDAO Discord server. JuiceboxDAO builds Juicebox, an Ethereum funding protocol. Today's date is {datetime.date.today().strftime('%B %d, %Y')}. Please start with a summary that briefly outlines the most important topics discussed. Following this, write markdown sections with summaries for each significant topic. Within these sections, I would like bullet points summarizing the most important points raised, and inline or block quotes from any particularly important messages. Omit spam and discussions pertaining to blatant promotion."
     token_count += len(tokenizer.encode(system_prompt))
 
     all_messages = ''
@@ -82,7 +85,6 @@ def summarize(model="gpt-4", max_tokens=8192):
                     continue
     if skipped_files:
         print(f"Skipped: {', '.join(skipped_files)}.")
-
     
     response = openai.ChatCompletion.create(
         model=model,
@@ -101,7 +103,6 @@ def summarize(model="gpt-4", max_tokens=8192):
                 print(content, end="", flush=True)
                 file.write(content)
     print("\n\nSummary written to summary.md")
-
 
 if TOKEN and openai.api_key:
     client.run(TOKEN)
